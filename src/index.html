@@ -178,6 +178,7 @@
 <!-- 导航栏 -->
 <div class="nav-header no-print">
     <div class="nav-tab active">需求管理</div>
+    <div id="statusBar" style="float: right; color: #aaa; font-size: 12px;">准备就绪</div>
 </div>
 
 <!-- 筛选栏 -->
@@ -244,6 +245,7 @@
 <div class="operate-box no-print">
     <button class="add-btn" onclick="openAdd()">新增需求</button>
     <button class="export-btn" onclick="exportExcel()">导出Excel</button>
+    <button class="export-btn" onclick="openDbFolder()">打开数据库目录</button>
 </div>
 
 <!-- 数据表格 -->
@@ -337,7 +339,7 @@
 <script>
 // ===================== 核心配置 =====================
 const APP_DIR_DB = "demand.db";                // 程序目录模板库
-const APP_DATA_PATH = "xuqiu/demand.db";        // AppData持久化路径
+const APP_DATA_FILENAME = "demand.db";         // 数据库文件名
 const PAGE_SIZE = 20;                          // 每页20条数据
 let db = null;
 let SQL = null;
@@ -345,30 +347,61 @@ let SQL = null;
 let currentPage = 1;
 let totalCount = 0;
 
+// ===================== 获取保存路径 =====================
+function getSavePath() {
+    // 直接使用相对路径，pakeplus会自动处理
+    return APP_DATA_FILENAME;
+}
+
+// ===================== 确保目录存在 =====================
+async function ensureDir() {
+    // pakeplus会自动处理目录创建
+    return true;
+}
+
 // ===================== 初始化数据库 =====================
 window.onload = async () => {
     try {
+        updateStatus("正在初始化数据库...");
         SQL = await initSqlJs({ locateFile: f => "./" + f });
         let dbData = null;
+        const savePath = getSavePath();
+        console.log("📁 保存路径:", savePath);
 
-        // 1. 优先读取 AppData 中的数据库
-        if (window.pake) {
+        // 1. 优先读取本地保存的数据库
+        const isDesktop = typeof window.pake !== 'undefined' || typeof pake !== 'undefined';
+        const pakeObj = typeof pake !== 'undefined' ? pake : window.pake;
+        
+        if (isDesktop && pakeObj) {
             try {
-                dbData = await pake.readFile(APP_DATA_PATH);
-                console.log("✅ 加载用户数据：AppData/xuqiu/demand.db");
+                dbData = await pakeObj.readFile(savePath);
+                console.log("✅ 加载本地数据：", savePath);
+                updateStatus("已加载本地数据");
             } catch (e) {
+                console.log("📂 本地无数据,尝试加载模板库...");
                 // 2. 无用户数据 → 读取程序目录模板库
                 try {
-                    dbData = await pake.readFile(APP_DIR_DB);
-                    console.log("✅ 首次启动，加载程序目录模板库");
+                    dbData = await pakeObj.readFile(APP_DIR_DB);
+                    console.log("✅ 首次启动，加载程序目录模板库:", APP_DIR_DB);
+                    updateStatus("首次启动，加载模板库");
                 } catch (err) {
                     console.log("✅ 无模板库，创建新数据库");
+                    updateStatus("创建新数据库");
                 }
+            }
+        } else {
+            // 非桌面环境，使用localStorage作为后备
+            console.log("⚠️ 非桌面环境,使用LocalStorage后备");
+            const localData = localStorage.getItem("demand_db");
+            if (localData) {
+                dbData = new Uint8Array(JSON.parse(localData));
+                updateStatus("已加载浏览器缓存数据");
             }
         }
 
         // 加载数据库到内存
         db = dbData ? new SQL.Database(new Uint8Array(dbData)) : new SQL.Database();
+        console.log("🗄️ 数据库已加载到内存");
         
         // 自动创建数据表
         db.run(`CREATE TABLE IF NOT EXISTS demands (
@@ -383,24 +416,70 @@ window.onload = async () => {
             createTime TEXT
         )`);
 
-        await saveToAppData();
+        // 立即保存确保文件存在
+        await saveToLocal();
         loadPageData(); // 加载分页数据
+        updateStatus("系统准备就绪");
     } catch (err) {
+        console.error("❌ 初始化失败:", err);
+        updateStatus("初始化失败: " + err.message, true);
         document.getElementById("dataList").innerHTML = `<tr><td colspan="10" style="color:red">初始化失败：${err.message}</td></tr>`;
     }
 };
 
-// ===================== 核心：静默保存到AppData + VACUUM内存优化 =====================
-async function saveToAppData() {
-    if (!db || !window.pake) return;
+// ===================== 更新状态栏 =====================
+function updateStatus(text, isError = false) {
+    const statusBar = document.getElementById("statusBar");
+    if (statusBar) {
+        statusBar.textContent = text;
+        statusBar.style.color = isError ? "#f00" : "#0a0";
+    }
+    console.log(isError ? "❌ " + text : "✅ " + text);
+}
+
+// ===================== 核心：静默保存到本地 =====================
+async function saveToLocal() {
+    if (!db) {
+        console.error("❌ 数据库未初始化");
+        updateStatus("数据库未初始化", true);
+        return;
+    }
+    
     try {
-        // 执行VACUUM 收缩内存、回收空闲页
-        db.run("VACUUM;");
+        updateStatus("正在保存数据...");
+        // 直接导出数据库，不执行VACUUM避免空数据库问题
         const buffer = db.export();
-        await pake.writeFile(APP_DATA_PATH, buffer);
-        console.log("✅ 内存已优化，数据静默保存到AppData");
+        
+        // 检测是否为桌面环境（PakePlus）
+        const isDesktop = typeof window.pake !== 'undefined' || typeof pake !== 'undefined';
+        
+        if (isDesktop) {
+            // 桌面环境：保存到本地文件
+            const savePath = getSavePath();
+            try {
+                // 尝试使用全局pake对象
+                if (typeof pake !== 'undefined') {
+                    await pake.writeFile(savePath, buffer);
+                } else if (window.pake) {
+                    // 尝试使用window.pake对象
+                    await window.pake.writeFile(savePath, buffer);
+                }
+                updateStatus(`数据已保存: ${savePath}`);
+                console.log("✅ 已保存到本地文件:", savePath);
+            } catch (e) {
+                // 保存失败，尝试备选方案
+                console.error("⚠️ 保存到文件失败，尝试保存到浏览器缓存:", e);
+                localStorage.setItem("demand_db", JSON.stringify(Array.from(buffer)));
+                updateStatus("数据已保存到浏览器缓存");
+            }
+        } else {
+            // 非桌面环境：保存到LocalStorage
+            localStorage.setItem("demand_db", JSON.stringify(Array.from(buffer)));
+            updateStatus("数据已保存到浏览器缓存");
+        }
     } catch (e) {
-        console.error("❌ 保存失败：", e);
+        console.error("❌ 保存失败:", e);
+        updateStatus("保存失败: " + e.message, true);
     }
 }
 
@@ -525,6 +604,11 @@ function closeModal() { document.getElementById("modal").style.display = "none";
 
 // ===================== 保存数据 =====================
 async function saveData() {
+    if (!db) {
+        alert("数据库未初始化，请重新启动应用");
+        return;
+    }
+    
     const id = document.getElementById("editId").value;
     const data = [
         document.getElementById("title").value,
@@ -542,7 +626,7 @@ async function saveData() {
         id ? db.run(`UPDATE demands SET title=?,desc=?,priority=?,manager=?,product=?,project=?,status=?,createTime=? WHERE ID=?`, [...data, id])
            : db.run(`INSERT INTO demands VALUES (NULL,?,?,?,?,?,?,?,?)`, data);
         
-        await saveToAppData();
+        await saveToLocal();
         alert("保存成功");
         closeModal();
         loadPageData();
@@ -554,9 +638,13 @@ async function saveData() {
 // ===================== 删除数据 =====================
 async function delData(id) {
     if (!confirm("确定删除？")) return;
+    if (!db) {
+        alert("数据库未初始化，请重新启动应用");
+        return;
+    }
     try {
         db.run("DELETE FROM demands WHERE ID=?", [id]);
-        await saveToAppData();
+        await saveToLocal();
         loadPageData();
     } catch (e) {
         alert("删除失败：" + e.message);
@@ -602,6 +690,31 @@ function exportExcel() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "需求数据");
     XLSX.writeFile(workbook, "需求管理数据.xlsx");
+}
+
+// ===================== 打开数据库目录 =====================
+async function openDbFolder() {
+    try {
+        // 数据库文件直接保存在应用目录
+        const savePath = getSavePath();
+        console.log("数据库文件:", savePath);
+        
+        if (window.pake && pake.exec) {
+            // 尝试使用exec命令打开当前目录
+            await pake.exec(`explorer "."`);
+            console.log("✅ 已打开应用目录");
+        } else if (window.pake && pake.openPath) {
+            // PakePlus提供的方法：打开当前目录
+            await pake.openPath(".");
+            console.log("✅ 已打开应用目录");
+        } else {
+            // 兜底方案：显示路径
+            alert("数据库文件位置：\n" + savePath + "\n\n请在应用目录中查找此文件");
+        }
+    } catch (e) {
+        console.error("❌ 打开文件夹失败:", e);
+        alert("打开文件夹失败，请在应用目录中查找 demand.db 文件");
+    }
 }
 </script>
 </body>
