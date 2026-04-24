@@ -1,11 +1,608 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PakePlus</title>
-    </head>
-    <body>
-        Hello World
-    </body>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>需求管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+        }
+        /* 导航栏 */
+        .nav-header {
+            background-color: #2c2c2c;
+            height: 48px;
+            line-height: 48px;
+            padding: 0 20px;
+        }
+        .nav-tab {
+            display: inline-block;
+            padding: 0 20px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .nav-tab.active {
+            background-color: #00a854;
+        }
+        /* 筛选栏 */
+        .filter-box {
+            background-color: #fff;
+            padding: 15px 20px;
+            margin: 15px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .filter-item label {
+            font-size: 12px;
+            color: #666;
+        }
+        .filter-item input, .filter-item select {
+            height: 32px;
+            padding: 0 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+        .filter-btn {
+            height: 32px;
+            padding: 0 15px;
+            background-color: #00a854;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 18px;
+        }
+        /* 操作按钮栏 */
+        .operate-box {
+            padding: 0 20px;
+            margin-bottom: 10px;
+            text-align: right;
+        }
+        .operate-box button {
+            height: 32px;
+            padding: 0 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 8px;
+            color: #fff;
+        }
+        .add-btn { background-color: #0088ff; }
+        .export-btn { background-color: #00a854; }
+        /* 表格 */
+        .table-box {
+            margin: 0 15px;
+            background-color: #fff;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th, .data-table td {
+            border: 1px solid #eee;
+            padding: 10px;
+            text-align: left;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .data-table th {
+            background-color: #f9f9f9;
+            font-weight: normal;
+        }
+        /* 状态样式 */
+        .status-pending { color: #f00; }
+        .priority-high { color: #f00; font-weight: bold; }
+        .priority-middle { color: #ff9800; }
+        .priority-low { color: #4caf54; }
+        /* 操作列 */
+        .operate-edit { color: #0088ff; cursor: pointer; margin-right: 10px; }
+        .operate-del { color: #f00; cursor: pointer; }
+        
+        /* 分页样式 */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            padding: 15px;
+            align-items: center;
+        }
+        .page-btn {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .page-btn.active {
+            background: #0088ff;
+            color: #fff;
+            border-color: #0088ff;
+        }
+        .page-btn:disabled {
+            background: #f5f5f5;
+            cursor: not-allowed;
+            color: #999;
+        }
+
+        /* 弹窗 */
+        .modal-mask {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: none;
+            justify-content: center; align-items: center; z-index: 999;
+        }
+        .modal-box {
+            background: #fff; width: 700px; border-radius: 4px; padding: 20px;
+        }
+        .modal-title {
+            font-size: 16px; margin-bottom: 15px; padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .form-item {
+            margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px;
+        }
+        .form-item label { font-size: 13px; }
+        .form-item input, .form-item textarea, .form-item select {
+            padding: 8px; border: 1px solid #ddd; border-radius: 4px;
+        }
+        .modal-footer { text-align: right; margin-top: 20px; }
+        .modal-btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+        .confirm { background: #0088ff; color: #fff; }
+        .cancel { background: #eee; color: #666; }
+
+        /* 打印样式 */
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+    <!-- 引入Excel导出库 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<!-- 导航栏 -->
+<div class="nav-header no-print">
+    <div class="nav-tab active">需求管理</div>
+</div>
+
+<!-- 筛选栏 -->
+<div class="filter-box no-print">
+    <div class="filter-item">
+        <label>需求标题</label>
+        <input id="filter-title">
+    </div>
+    <div class="filter-item">
+        <label>需求状态</label>
+        <select id="filter-status">
+            <option value="全部">全部</option>
+            <option value="待处理">待处理</option>
+            <option value="处理中">处理中</option>
+            <option value="已完成">已完成</option>
+        </select>
+    </div>
+    <div class="filter-item">
+        <label>优先级</label>
+        <select id="filter-priority">
+            <option value="全部">全部</option>
+            <option value="高">高</option>
+            <option value="中">中</option>
+            <option value="低">低</option>
+            <option value="普通">普通</option>
+        </select>
+    </div>
+    <div class="filter-item">
+        <label>负责人</label>
+        <select id="filter-manager">
+            <option value="全部">全部</option>
+            <option value="杨光明">杨光明</option>
+            <option value="田栋阳">田栋阳</option>
+        </select>
+    </div>
+    <!-- 所属产品：下拉单选 -->
+    <div class="filter-item">
+        <label>所属产品</label>
+        <select id="filter-product">
+            <option value="全部">全部</option>
+            <option value="经营性资产管理">经营性资产管理</option>
+            <option value="统一支付与对账">统一支付与对账</option>
+            <option value="非税与财政电子票">非税与财政电子票</option>
+            <option value="税务数电发票">税务数电发票</option>
+            <option value="村级电子票据">村级电子票据</option>
+            <option value="电子收据">电子收据</option>
+            <option value="反向开票">反向开票</option>
+            <option value="数据监管分析">数据监管分析</option>
+            <option value="电子缴库缴户">电子缴库缴户</option>
+            <option value="智能报销">智能报销</option>
+            <option value="电子会计档案">电子会计档案</option>
+            <option value="通用产品">通用产品</option>
+            <option value="乐企纳税申报">乐企纳税申报</option>
+        </select>
+    </div>
+    <div class="filter-item">
+        <label>所属项目</label>
+        <input id="filter-project" placeholder="请输入项目名称">
+    </div>
+    <button class="filter-btn" onclick="refreshPage()">筛选</button>
+</div>
+
+<!-- 操作按钮 -->
+<div class="operate-box no-print">
+    <button class="add-btn" onclick="openAdd()">新增需求</button>
+    <button class="export-btn" onclick="exportExcel()">导出Excel</button>
+</div>
+
+<!-- 数据表格 -->
+<div class="table-box">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>需求标题</th>
+                <th>需求描述</th>
+                <th>优先级</th>
+                <th>状态</th>
+                <th>负责人</th>
+                <th>所属产品</th>
+                <th>所属项目</th>
+                <th>创建时间</th>
+                <th class="no-print">操作</th>
+            </tr>
+        </thead>
+        <tbody id="dataList">
+            <tr><td colspan="10" align="center">正在加载数据库...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 分页 -->
+<div class="pagination no-print" id="pagination"></div>
+
+<!-- 弹窗 -->
+<div class="modal-mask no-print" id="modal">
+    <div class="modal-box">
+        <div class="modal-title" id="modalTitle">新增需求</div>
+        <input type="hidden" id="editId">
+        <div class="form-item">
+            <label>需求标题 *</label>
+            <input id="title" required>
+        </div>
+        <div class="form-item">
+            <label>需求描述</label>
+            <textarea id="desc" rows="3"></textarea>
+        </div>
+        <div class="form-item">
+            <label>优先级</label>
+            <select id="priority">
+                <option>普通</option><option>高</option><option>中</option><option>低</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label>负责人</label>
+            <select id="manager">
+                <option>杨光明</option><option>田栋阳</option>
+            </select>
+        </div>
+        <!-- 新增/编辑 所属产品：下拉单选 -->
+        <div class="form-item">
+            <label>所属产品</label>
+            <select id="product">
+                <option value="经营性资产管理">经营性资产管理</option>
+                <option value="统一支付与对账">统一支付与对账</option>
+                <option value="非税与财政电子票">非税与财政电子票</option>
+                <option value="税务数电发票">税务数电发票</option>
+                <option value="村级电子票据">村级电子票据</option>
+                <option value="电子收据">电子收据</option>
+                <option value="反向开票">反向开票</option>
+                <option value="数据监管分析">数据监管分析</option>
+                <option value="电子缴库缴户">电子缴库缴户</option>
+                <option value="智能报销">智能报销</option>
+                <option value="电子会计档案">电子会计档案</option>
+                <option value="通用产品">通用产品</option>
+                <option value="乐企纳税申报">乐企纳税申报</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label>所属项目</label>
+            <input id="project" placeholder="请输入所属项目">
+        </div>
+        <div class="form-item">
+            <label>需求状态</label>
+            <select id="status">
+                <option>待处理</option><option>处理中</option><option>已完成</option>
+            </select>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn cancel" onclick="closeModal()">取消</button>
+            <button class="modal-btn confirm" onclick="saveData()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="./sql-wasm.js"></script>
+<script>
+// ===================== 核心配置 =====================
+const APP_DIR_DB = "demand.db";                // 程序目录模板库
+const APP_DATA_PATH = "xuqiu/demand.db";        // AppData持久化路径
+const PAGE_SIZE = 20;                          // 每页20条数据
+let db = null;
+let SQL = null;
+// 分页全局变量
+let currentPage = 1;
+let totalCount = 0;
+
+// ===================== 初始化数据库 =====================
+window.onload = async () => {
+    try {
+        SQL = await initSqlJs({ locateFile: f => "./" + f });
+        let dbData = null;
+
+        // 1. 优先读取 AppData 中的数据库
+        if (window.pake) {
+            try {
+                dbData = await pake.readFile(APP_DATA_PATH);
+                console.log("✅ 加载用户数据：AppData/xuqiu/demand.db");
+            } catch (e) {
+                // 2. 无用户数据 → 读取程序目录模板库
+                try {
+                    dbData = await pake.readFile(APP_DIR_DB);
+                    console.log("✅ 首次启动，加载程序目录模板库");
+                } catch (err) {
+                    console.log("✅ 无模板库，创建新数据库");
+                }
+            }
+        }
+
+        // 加载数据库到内存
+        db = dbData ? new SQL.Database(new Uint8Array(dbData)) : new SQL.Database();
+        
+        // 自动创建数据表
+        db.run(`CREATE TABLE IF NOT EXISTS demands (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            desc TEXT,
+            priority TEXT,
+            manager TEXT,
+            product TEXT,
+            project TEXT,
+            status TEXT,
+            createTime TEXT
+        )`);
+
+        await saveToAppData();
+        loadPageData(); // 加载分页数据
+    } catch (err) {
+        document.getElementById("dataList").innerHTML = `<tr><td colspan="10" style="color:red">初始化失败：${err.message}</td></tr>`;
+    }
+};
+
+// ===================== 核心：静默保存到AppData + VACUUM内存优化 =====================
+async function saveToAppData() {
+    if (!db || !window.pake) return;
+    try {
+        // 执行VACUUM 收缩内存、回收空闲页
+        db.run("VACUUM;");
+        const buffer = db.export();
+        await pake.writeFile(APP_DATA_PATH, buffer);
+        console.log("✅ 内存已优化，数据静默保存到AppData");
+    } catch (e) {
+        console.error("❌ 保存失败：", e);
+    }
+}
+
+// ===================== 分页查询数据（下拉产品精确筛选） =====================
+function loadPageData() {
+    if (!db) return;
+    currentPage = Math.max(1, currentPage);
+    const offset = (currentPage - 1) * PAGE_SIZE;
+
+    // 构建筛选条件
+    const title = document.getElementById("filter-title").value;
+    const status = document.getElementById("filter-status").value;
+    const priority = document.getElementById("filter-priority").value;
+    const manager = document.getElementById("filter-manager").value;
+    const product = document.getElementById("filter-product").value;
+    const project = document.getElementById("filter-project").value;
+
+    let whereSql = "WHERE 1=1";
+    let params = [];
+
+    if (title) { whereSql += " AND title LIKE ?"; params.push(`%${title}%`); }
+    if (status !== "全部") { whereSql += " AND status = ?"; params.push(status); }
+    if (priority !== "全部") { whereSql += " AND priority = ?"; params.push(priority); }
+    if (manager !== "全部") { whereSql += " AND manager = ?"; params.push(manager); }
+    // 产品：下拉精确匹配
+    if (product !== "全部") { whereSql += " AND product = ?"; params.push(product); }
+    if (project) { whereSql += " AND project LIKE ?"; params.push(`%${project}%`); }
+
+    // 1. 查询总条数
+    const countRes = db.exec(`SELECT COUNT(*) FROM demands ${whereSql}`, params);
+    totalCount = countRes[0]?.values[0][0] || 0;
+
+    // 2. 仅查询当前页20条数据
+    const dataSql = `SELECT * FROM demands ${whereSql} ORDER BY ID DESC LIMIT ? OFFSET ?`;
+    const dataParams = [...params, PAGE_SIZE, offset];
+    const res = db.exec(dataSql, dataParams);
+    const list = res[0]?.values || [];
+
+    renderTable(list);
+    renderPagination();
+}
+
+// 渲染表格数据
+function renderTable(list) {
+    const html = list.map(item => `
+    <tr>
+        <td>${item[0]}</td>
+        <td>${item[1]}</td>
+        <td>${item[2] || '-'}</td>
+        <td class="${item[3]==='高'?'priority-high':item[3]==='中'?'priority-middle':item[3]==='低'?'priority-low':''}">${item[3]}</td>
+        <td class="status-pending">${item[7]}</td>
+        <td>${item[4]}</td>
+        <td>${item[5] || '-'}</td>
+        <td>${item[6] || '-'}</td>
+        <td>${item[8]}</td>
+        <td class="no-print">
+            <span class="operate-edit" onclick="openEdit(${item[0]})">编辑</span>
+            <span class="operate-del" onclick="delData(${item[0]})">删除</span>
+        </td>
+    </tr>`).join('');
+
+    document.getElementById("dataList").innerHTML = html || '<tr><td colspan="10" align="center">暂无数据</td></tr>';
+}
+
+// 渲染分页控件
+function renderPagination() {
+    const totalPage = Math.ceil(totalCount / PAGE_SIZE);
+    const pagination = document.getElementById("pagination");
+    
+    if (totalPage <= 1) {
+        pagination.innerHTML = "";
+        return;
+    }
+
+    let html = `
+        <button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>
+        <span>第 ${currentPage} / ${totalPage} 页，共 ${totalCount} 条</span>
+        <button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPage ? 'disabled' : ''}>下一页</button>
+    `;
+    pagination.innerHTML = html;
+}
+
+// 切换页码
+function changePage(page) {
+    currentPage = page;
+    loadPageData();
+}
+
+// 刷新分页
+function refreshPage() {
+    currentPage = 1;
+    loadPageData();
+}
+
+// ===================== 新增/编辑 =====================
+function openAdd() {
+    document.getElementById("modalTitle").innerText = "新增需求";
+    document.getElementById("editId").value = "";
+    document.getElementById("title").value = "";
+    document.getElementById("desc").value = "";
+    document.getElementById("product").value = "经营性资产管理"; // 默认选中第一个产品
+    document.getElementById("project").value = "";
+    document.getElementById("modal").style.display = "flex";
+}
+async function openEdit(id) {
+    const res = db.exec("SELECT * FROM demands WHERE ID=?", [id]);
+    const item = res[0]?.values[0];
+    if (!item) return alert("数据不存在");
+    
+    document.getElementById("modalTitle").innerText = "编辑需求";
+    document.getElementById("editId").value = item[0];
+    document.getElementById("title").value = item[1];
+    document.getElementById("desc").value = item[2] || "";
+    document.getElementById("priority").value = item[3];
+    document.getElementById("manager").value = item[4];
+    document.getElementById("product").value = item[5] || "经营性资产管理"; // 回显产品
+    document.getElementById("project").value = item[6] || "";
+    document.getElementById("status").value = item[7];
+    document.getElementById("modal").style.display = "flex";
+}
+function closeModal() { document.getElementById("modal").style.display = "none"; }
+
+// ===================== 保存数据 =====================
+async function saveData() {
+    const id = document.getElementById("editId").value;
+    const data = [
+        document.getElementById("title").value,
+        document.getElementById("desc").value,
+        document.getElementById("priority").value,
+        document.getElementById("manager").value,
+        document.getElementById("product").value,
+        document.getElementById("project").value,
+        document.getElementById("status").value,
+        new Date().toLocaleString()
+    ];
+    if (!data[0]) return alert("请输入需求标题");
+
+    try {
+        id ? db.run(`UPDATE demands SET title=?,desc=?,priority=?,manager=?,product=?,project=?,status=?,createTime=? WHERE ID=?`, [...data, id])
+           : db.run(`INSERT INTO demands VALUES (NULL,?,?,?,?,?,?,?,?)`, data);
+        
+        await saveToAppData();
+        alert("保存成功");
+        closeModal();
+        loadPageData();
+    } catch (e) {
+        alert("保存失败：" + e.message);
+    }
+}
+
+// ===================== 删除数据 =====================
+async function delData(id) {
+    if (!confirm("确定删除？")) return;
+    try {
+        db.run("DELETE FROM demands WHERE ID=?", [id]);
+        await saveToAppData();
+        loadPageData();
+    } catch (e) {
+        alert("删除失败：" + e.message);
+    }
+}
+
+// ===================== 导出Excel =====================
+function exportExcel() {
+    if (!db) return alert("暂无数据可导出");
+    
+    // 筛选条件（同步下拉产品）
+    const title = document.getElementById("filter-title").value;
+    const status = document.getElementById("filter-status").value;
+    const priority = document.getElementById("filter-priority").value;
+    const manager = document.getElementById("filter-manager").value;
+    const product = document.getElementById("filter-product").value;
+    const project = document.getElementById("filter-project").value;
+
+    let whereSql = "WHERE 1=1";
+    let params = [];
+    if (title) { whereSql += " AND title LIKE ?"; params.push(`%${title}%`); }
+    if (status !== "全部") { whereSql += " AND status = ?"; params.push(status); }
+    if (priority !== "全部") { whereSql += " AND priority = ?"; params.push(priority); }
+    if (manager !== "全部") { whereSql += " AND manager = ?"; params.push(manager); }
+    if (product !== "全部") { whereSql += " AND product = ?"; params.push(product); }
+    if (project) { whereSql += " AND project LIKE ?"; params.push(`%${project}%`); }
+
+    const res = db.exec(`SELECT * FROM demands ${whereSql} ORDER BY ID DESC`, params);
+    const list = res[0]?.values || [];
+    if (list.length === 0) return alert("暂无数据可导出");
+
+    // 构造Excel
+    const excelData = [
+        ['ID', '需求标题', '需求描述', '优先级', '需求状态', '负责人', '所属产品', '所属项目', '创建时间']
+    ];
+    list.forEach(item => {
+        excelData.push([
+            item[0], item[1], item[2] || '-', item[3], item[7], item[4], item[5] || '-', item[6] || '-', item[8]
+        ]);
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "需求数据");
+    XLSX.writeFile(workbook, "需求管理数据.xlsx");
+}
+</script>
+</body>
 </html>
